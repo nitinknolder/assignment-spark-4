@@ -10,23 +10,27 @@ object TwitterStreaming extends App {
 
   val logger = Logger.getLogger (this.getClass)
 
-  val conf = new SparkConf ().setMaster ("local[*]").setAppName ("Spark Streaming - PopularHashTags")
-  val sc = new SparkContext (conf)
+  val conf = new SparkConf ().setMaster ("local[*]").setAppName ("Spark-assignment-4")
+  val sparkContext = new SparkContext (conf)
 
-  sc.setLogLevel ("WARN")
+  sparkContext.setLogLevel ("WARN")
   val blockSize = 10
-  val ssc = new StreamingContext (sc, Seconds (blockSize))
+  val sparkStreamContext = new StreamingContext (sparkContext, Seconds (blockSize))
 
-  val stream: DStream[Status] = TwitterUtils.createStream (ssc, None)
+  val stream: DStream[Status] = TwitterUtils.createStream (sparkStreamContext, None)
   val hashTags = stream.flatMap (status => status.getText.split (" ").filter (_.startsWith ("#")))
-  ssc.checkpoint ("_checkpoint")
+  sparkStreamContext.checkpoint ("_checkpoint")
 
-  val windowSize = 60
-  val topCounts60 = hashTags.map ((_, 1)).reduceByKeyAndWindow (_ + _, Seconds (windowSize))
+  val windowSize = 50
+  val topCounts = hashTags.map ((_, 1)).reduceByKeyAndWindow (_ + _, Seconds (windowSize))
     .map { case (topic, count) => (count, topic) }
     .transform (_.sortByKey (false))
   stream.print ()
 
+
+/**
+  *Database Configuration
+  */
   val url = "jdbc:mysql://localhost:3306/TwitterApp"
   val username = "root"
   val password = "knoldus"
@@ -36,7 +40,8 @@ object TwitterStreaming extends App {
     * Fetching Top 3 tweets count in 10 Seconds Block and 60 Seconds Window
     *
     */
-  topCounts60.foreachRDD {
+
+  topCounts.foreachRDD {
     rdd =>
       rdd.take (3).foreach {
         case (count, hashtag) =>
@@ -50,7 +55,7 @@ object TwitterStreaming extends App {
       }
   }
 
-  ssc.start ()
-  ssc.awaitTermination ()
+  sparkStreamContext.start ()
+  sparkStreamContext.awaitTermination ()
 
 }
